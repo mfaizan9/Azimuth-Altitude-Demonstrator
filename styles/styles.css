@@ -1,0 +1,268 @@
+/* ===========================================================================
+   Sim-specific styles for the Azimuth/Altitude Demonstrator.
+   Layered ON TOP of the KL-UNL foundation (foundation/kl-unl.css), which is
+   never edited. Uses the foundation custom properties and classes where it can.
+   =========================================================================== */
+
+/* Comfortably large, zoomable type (rem-based so it tracks the browser font
+   setting and reflows at 200% zoom). Body floor ~1.125rem per the guidelines. */
+body {
+  font-size: 1.125rem;
+  line-height: 1.4;
+}
+
+/* --- Layout -------------------------------------------------------------- */
+/* Diagram on the left (wider), the two control panels stacked on the right,
+   mirroring the original Flash layout. Collapses to a single column at the
+   foundation's 56rem breakpoint (kept intact, re-declared for our own grid). */
+.app-layout.sim-layout {
+  grid-template-columns: minmax(22rem, 1.15fr) minmax(19rem, 0.85fr);
+  gap: 0.75rem;
+  align-items: stretch;   /* both columns share one row height */
+  padding: 0.5rem;
+}
+
+/* The diagram panel (left) is driven to the same height as the right-hand
+   column: it becomes a flex column whose canvas area fills the leftover space,
+   and the square canvas scales (centred) to fit that space. */
+.app-layout.sim-layout > .sim-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.app-layout.sim-layout > .sim-panel .panel__canvas-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;          /* allow the canvas to shrink so it never forces
+                             the column taller than the controls column */
+}
+
+.right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.sim-panel {
+  border-width: var(--border-width, 1px);
+  border-style: var(--border-style, solid);
+  border-color: var(--border-color, #767676);
+  border-radius: 4px;
+}
+
+.sim-panel .panel__heading {
+  color: var(--foreground-color, #1a1a1a);
+  border-bottom: 1px solid #cccccc;
+}
+
+/* --- Canvas stage ------------------------------------------------------- */
+/* Keep the original internal coordinate system; CSS scales the canvas to fit
+   its panel while preserving the square aspect ratio. */
+.stage {
+  position: relative;
+  width: 100%;
+  max-width: 27.5rem;   /* 440px design size; scales down on small screens */
+  max-height: 100%;     /* fit the height the controls column dictates */
+  margin: auto;
+  aspect-ratio: 1 / 1;
+}
+
+#sky {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;   /* dragging the star/sphere must not scroll the page */
+  cursor: grab;
+}
+
+.sim-kbd-hint {
+  margin-top: 0.25rem;
+  font-style: italic;
+  color: #555555;
+}
+
+/* Focusable keyboard handle sitting over the star. It is mouse-transparent
+   (pointer-events:none) so mouse dragging still goes to the canvas, but it
+   stays in the Tab order for keyboard users. A focus ring shows on the star. */
+.star-handle {
+  position: absolute;
+  width: 1.9rem;
+  height: 1.9rem;
+  margin: 0;
+  padding: 0;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.star-handle:focus-visible {
+  outline-width: 0.125rem;
+  outline-style: solid;
+  outline-color: var(--outline-color, #005fcc);
+  outline-offset: 0.125rem;
+}
+
+#sky.dragging {
+  cursor: grabbing;
+}
+
+/* Positioned text labels drawn over the canvas. Coordinates are set in percent
+   by simulation.js, so they track the canvas at any display size or zoom. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.lbl {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Cardinal directions: white text on the green/grey sphere -> dark halo so it
+   stays legible (>=3:1 against both). */
+.lbl--dir {
+  color: #ffffff;
+  font-size: 1.05rem;
+  text-shadow:
+    -1px -1px 0 #1a1a1a,  1px -1px 0 #1a1a1a,
+    -1px  1px 0 #1a1a1a,  1px  1px 0 #1a1a1a;
+}
+
+/* Named labels (Zenith/Nadir/Horizon Plane/Meridian): dark text + light halo */
+.lbl--name {
+  color: #1a1a1a;
+  font-size: 0.95rem;
+  text-shadow:
+    -1px -1px 0 #ffffff,  1px -1px 0 #ffffff,
+    -1px  1px 0 #ffffff,  1px  1px 0 #ffffff;
+  display: none;          /* shown when the matching checkbox is on */
+}
+
+/* Azimuth / altitude readouts near the star. Colours mirror the original
+   (az = blue-grey, alt = red); a light halo keeps contrast over any backdrop. */
+.lbl--az,
+.lbl--alt {
+  font-size: 1rem;
+  font-weight: 700;
+  text-shadow:
+    -1px -1px 0 #ffffff,  1px -1px 0 #ffffff,
+    -1px  1px 0 #ffffff,  1px  1px 0 #ffffff;
+}
+.lbl--az  { color: #4a4080; }   /* darkened azColor for >=4.5:1 contrast */
+.lbl--alt { color: #9a2230; }   /* darkened altColor for >=4.5:1 contrast */
+
+/* --- Star Position controls --------------------------------------------- */
+/* Breathing room so the first row doesn't touch the heading's divider line */
+.right-col > .sim-panel:first-child .control-fieldset {
+  padding-top: 0.85rem;
+}
+
+.sim-slider-row {
+  grid-template-columns: 3rem 5.5rem auto;
+  align-items: center;
+  gap: 0.4rem 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.sim-slider-row .control-row__label {
+  text-align: right;
+  font-weight: 600;
+}
+
+.sim-num {
+  width: 5.25rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sim-unit {
+  font-size: 1.05rem;
+}
+
+/* The slider spans the full width on its own row below the label/value, so the
+   number field and unit always line up in a tidy column. */
+.sim-range {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 2.75rem;   /* comfortable touch target */
+  cursor: pointer;
+}
+
+/* --- Labels panel ------------------------------------------------------- */
+.sim-labels-body {
+  padding: 0.75rem 1rem 1rem;
+}
+
+.sim-button-row {
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.sim-button {
+  flex: 1 1 0;
+  border-width: var(--border-width, 1px);
+  border-style: var(--border-style, solid);
+  border-color: var(--border-color, #767676);
+  border-radius: 4px;
+  background: var(--button-background-color, #005a9c);
+  color: var(--button-foreground-color, #ffffff);
+  font-size: 1rem;
+  font-weight: 600;
+}
+.sim-button:hover,
+.sim-button:focus-visible {
+  filter: brightness(var(--button-hover-darken, 0.9));
+}
+
+.sim-checks {
+  padding: 0;
+}
+
+.sim-checks .control-fieldset__legend {
+  font-weight: 600;
+  margin-bottom: 0.6rem;
+}
+
+.sim-checks .control-choice {
+  min-height: 2.25rem;     /* roomy, touch-friendly rows */
+  gap: 0.5rem;
+}
+
+.sim-checks .control-choice label {
+  font-size: 1rem;
+}
+
+/* --- Responsive: phone portrait ---------------------------------------- */
+/* Carry the layout below the foundation's 56rem breakpoint into a single,
+   stacked, full-width column in reading order. The foundation already sets
+   .app-layout to 1fr at 56rem; we re-assert it for our higher-specificity
+   selector so we don't fight it. */
+@media (max-width: 56rem) {
+  .app-layout.sim-layout {
+    grid-template-columns: 1fr;
+  }
+  .stage {
+    max-width: 24rem;
+  }
+}
+
+@media (max-width: 30rem) {
+  body { font-size: 1.0625rem; }
+  .sim-labels-body { padding: 0.75rem 0.75rem 1rem; }
+  .sim-button-row { gap: 0.6rem; }
+}
+
+/* Respect users who prefer reduced motion (this sim has no autonomous motion,
+   but keep transitions instant for them). */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

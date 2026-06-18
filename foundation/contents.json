@@ -1,0 +1,20 @@
+{
+  "_comment": "Per-sim contents file for the Azimuth/Altitude Demonstrator. The shared KL-UNL contents.json could not be used verbatim because it currently contains invalid JSON (raw control characters and unescaped double quotes inside HTML content across several sibling entries), which makes the whole file fail JSON.parse and breaks the masthead for every sim. Per the conversion prompt's default per-sim-copy model, this copy holds only this sim's entry, copied verbatim from the shared file's 'altazimuth' entry. Keep entries in alphabetical order by key.",
+
+  "altazimuth": {
+    "meta": {
+      "title": "Azimuth/Altitude Demonstrator",
+      "version": "2.0"
+    },
+    "masthead": {
+      "help": {
+        "title": "Help and Instructions",
+        "content": "<p>This demonstrator illustrates the horizon coordinate system, where altitude and azimuth define an object's position in the sky.</p>"
+      },
+      "about": {
+        "title": "About this Demonstrator",
+        "content": "<p>For additional astronomy education materials please visit <a href=\"https://astro.unl.edu/\">Astronomy Education</a> at the University of Nebraska-Lincoln.</p><p>This demonstrator has been modernized by the AAS Applet Task Force to meet modern web accessibility standards (WCAG 2.1 AA).</p><p>Initial funding for this work was provided by NSF grants #0231270 and/or #0404988.</p><p>Permission is granted to use these files for noncommercial purposes as long as they remain unmodified.</p>"
+      }
+    }
+  }
+}

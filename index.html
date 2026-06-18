@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Azimuth/Altitude Demonstrator</title>
+
+  <!-- KL-UNL shared foundation (copied UNCHANGED into foundation/) -->
+  <link href="foundation/kl-unl.css" type="text/css" rel="stylesheet" media="all">
+  <!-- Sim-specific styles only (never edit foundation files) -->
+  <link href="styles/styles.css" type="text/css" rel="stylesheet" media="all">
+
+  <script defer src="foundation/kl-unl-masthead.js"></script>
+  <script defer src="foundation/kl-unl.js"></script>
+  <script defer src="simulation.js"></script>
+</head>
+<body>
+  <main>
+    <div class="app-shell">
+      <!-- Title bar + Reset/About supplied by the shared masthead component.
+           sim-id "altazimuth" already exists in foundation/contents.json. -->
+      <kl-unl-masthead sim-id="altazimuth" json-url="foundation/contents.json"></kl-unl-masthead>
+
+      <div class="app-layout sim-layout">
+
+        <!-- LEFT: the horizon diagram (canvas stage) -->
+        <section class="panel sim-panel" aria-labelledby="diagramHeading">
+          <h2 class="panel__heading" id="diagramHeading">The Horizon Diagram</h2>
+          <div class="panel__canvas-wrap">
+            <div class="stage" id="stage">
+              <canvas id="sky" width="440" height="440" role="img" tabindex="0"
+                      aria-describedby="skyHelp"
+                      aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+                      aria-label="Horizon diagram. Use the Star Position controls to move the star.">
+              </canvas>
+              <!-- Visual-only positioned text labels (announced via the live region) -->
+              <div class="overlay" id="overlay" aria-hidden="true">
+                <span class="lbl lbl--dir" id="lblN">N</span>
+                <span class="lbl lbl--dir" id="lblE">E</span>
+                <span class="lbl lbl--dir" id="lblS">S</span>
+                <span class="lbl lbl--dir" id="lblW">W</span>
+                <span class="lbl lbl--name" id="lblZenith">Zenith</span>
+                <span class="lbl lbl--name" id="lblNadir">Nadir</span>
+                <span class="lbl lbl--name" id="lblHorizon">Horizon Plane</span>
+                <span class="lbl lbl--name" id="lblMeridian">Meridian</span>
+                <span class="lbl lbl--az" id="lblAzValue">140.0&#176;</span>
+                <span class="lbl lbl--alt" id="lblAltValue">45.0&#176;</span>
+              </div>
+              <!-- Keyboard handle for the star (mouse users drag on the canvas;
+                   keyboard users Tab to this and use the arrow keys). -->
+              <button id="starHandle" class="star-handle" type="button"
+                      aria-describedby="starHandleHelp"
+                      aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown"
+                      aria-label="Star position. Azimuth 140.0 degrees, altitude 45.0 degrees.">
+              </button>
+            </div>
+          </div>
+          <p class="panel__help">You can also change the star&rsquo;s position by dragging it.</p>
+          <p class="panel__help sim-kbd-hint">Keyboard: focus the diagram and use the arrow keys to rotate the view.</p>
+          <!-- Instructions announced when the canvas receives focus -->
+          <p id="skyHelp" class="sr-only">Interactive horizon diagram. Press the left and right arrow keys to rotate the view horizontally, and the up and down arrow keys to change the viewing altitude. Page Up and Page Down change the viewing altitude in larger steps. Use the Star Position sliders, or the star handle, to move the star.</p>
+          <p id="starHandleHelp" class="sr-only">Use the arrow keys to move the star: left and right change its azimuth, up and down change its altitude. Hold Shift for finer steps; Page Up and Page Down change altitude in larger steps.</p>
+          <!-- Live, screen-reader-only description of the current diagram state -->
+          <p id="diagramDesc" class="sr-only" aria-live="polite"></p>
+        </section>
+
+        <!-- RIGHT: controls -->
+        <div class="right-col">
+
+          <section class="panel sim-panel" aria-labelledby="starHeading">
+            <h2 class="panel__heading" id="starHeading">Star Position</h2>
+            <fieldset class="control-fieldset">
+              <legend class="sr-only">Star position controls</legend>
+
+              <div class="control-row sim-slider-row">
+                <label class="control-row__label" for="azNumber">az:</label>
+                <input class="control-row__input sim-num" id="azNumber" type="number"
+                       min="0" max="360" step="0.1" value="140.0"
+                       inputmode="decimal" aria-describedby="azUnit">
+                <span class="sim-unit" id="azUnit" aria-label="degrees">&#176;</span>
+                <input class="control-row__slider sim-range" id="azSlider" type="range"
+                       min="0" max="360" step="0.1" value="140"
+                       aria-label="Azimuth" aria-valuetext="140.0 degrees">
+              </div>
+
+              <div class="control-row sim-slider-row">
+                <label class="control-row__label" for="altNumber">alt:</label>
+                <input class="control-row__input sim-num" id="altNumber" type="number"
+                       min="-90" max="90" step="0.1" value="45.0"
+                       inputmode="decimal" aria-describedby="altUnit">
+                <span class="sim-unit" id="altUnit" aria-label="degrees">&#176;</span>
+                <input class="control-row__slider sim-range" id="altSlider" type="range"
+                       min="-90" max="90" step="0.1" value="45"
+                       aria-label="Altitude" aria-valuetext="45.0 degrees">
+              </div>
+            </fieldset>
+          </section>
+
+          <section class="panel sim-panel" aria-labelledby="labelsHeading">
+            <h2 class="panel__heading" id="labelsHeading">Labels</h2>
+            <div class="sim-labels-body">
+              <div class="button-row sim-button-row">
+                <button class="button sim-button" id="showAllBtn" type="button">show all</button>
+                <button class="button sim-button" id="hideAllBtn" type="button">hide all</button>
+              </div>
+
+              <fieldset class="control-fieldset sim-checks">
+                <legend class="control-fieldset__legend">Individual label visibilities:</legend>
+                <div class="control-choice">
+                  <input type="checkbox" id="chkZenith">
+                  <label for="chkZenith">Zenith</label>
+                </div>
+                <div class="control-choice">
+                  <input type="checkbox" id="chkHorizon">
+                  <label for="chkHorizon">Horizon Plane</label>
+                </div>
+                <div class="control-choice">
+                  <input type="checkbox" id="chkNadir">
+                  <label for="chkNadir">Nadir</label>
+                </div>
+                <div class="control-choice">
+                  <input type="checkbox" id="chkMeridian">
+                  <label for="chkMeridian">Meridian</label>
+                </div>
+              </fieldset>
+            </div>
+          </section>
+
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

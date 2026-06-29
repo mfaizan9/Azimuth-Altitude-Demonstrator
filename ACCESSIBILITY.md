@@ -11,13 +11,32 @@ manual-inspection checks do not replace testing with real assistive technology.
   (`aria-labelledby`). The masthead supplies the header/nav.
 - `<html lang="en">` is set.
 
+## Screen-reader narration — units always spoken with numbers
+Per the supervisor requirement, **every numeric value is announced with its quantity name
+and unit, never a bare number**, units are spelled as full words, and negative values are
+spoken as "minus". Verify on both NVDA (Windows) and VoiceOver (macOS).
+- A shared `spokenDeg()` helper produces the spoken form, e.g. `45` → *"45.0 degrees"*,
+  `-30` → *"minus 30.0 degrees"*. It is used for every announcement and accessible value.
+- **Sliders**: `aria-label` names the quantity ("Azimuth" / "Altitude") and the
+  `aria-valuetext` repeats the quantity + value + unit, e.g. *"Azimuth 140.0 degrees"*,
+  *"Altitude minus 30.0 degrees"* — so the value is never read as a bare number even if the
+  name is missed. Updated on every change (drag, keyboard, or number entry).
+- **Number fields**: `aria-label` gives the full quantity ("Azimuth" / "Altitude") rather
+  than the abbreviated visual `az:` / `alt:`, and `aria-describedby` adds the unit
+  ("degrees"), so each reads e.g. *"Azimuth, edit, 140.0, degrees"*.
+- **Coordinate pair**: the live region and canvas description always name BOTH components
+  with unit (*"…azimuth 140.0 degrees, altitude 45.0 degrees"*) so the pair is unambiguous
+  in audio.
+
 ## The canvas (informative graphic)
 - The `<canvas>` has `role="img"` and a **dynamic `aria-label`** that always states the
-  star's current azimuth and altitude and which labels are visible, e.g.
+  star's current azimuth and altitude (with units) and which labels are visible, e.g.
   *"Horizon diagram. Star at azimuth 140.0 degrees, altitude 45.0 degrees. Visible labels:
   none."*
 - A visually-hidden `aria-live="polite"` region (`#diagramDesc`) announces meaningful
-  changes (star position; "View reset") on commit, not on every drag tick.
+  changes with units and context — star moves (*"Star at azimuth … degrees, altitude …
+  degrees."*) and view rotation (*"View rotated. Viewing azimuth … degrees, viewing
+  altitude … degrees."*) — on commit, not on every drag tick.
 - All on-sphere text (N/E/S/W, Zenith/Nadir/Horizon Plane/Meridian, the az/alt readouts)
   is **real HTML** positioned over the canvas, so it scales with browser zoom and is
   selectable. The overlay is `aria-hidden` to avoid double-announcing what the live region
@@ -49,6 +68,11 @@ manual-inspection checks do not replace testing with real assistive technology.
   and an `aria-valuetext` that announces the formatted value with units (e.g. "140.0
   degrees"). A paired `<input type="number">` gives a second, type-able path; both mutate
   the same state and stay in sync, matching the original's editable field + slider.
+- **Clicking the diagram moves focus to what was clicked.** Because the canvas is focusable
+  and the star handle is pointer-transparent, `pointerdown` explicitly focuses the canvas
+  (when rotating the view) or the star handle (when grabbing the star), so a mouse user who
+  clicks an element can immediately drive it with the arrow keys — the two are not stranded
+  in the Tab order.
 - **View rotation is fully keyboard-operable.** The canvas is focusable (`tabindex="0"`,
   with `aria-keyshortcuts` and an `aria-describedby` instruction announced on focus). When
   focused: Left/Right arrows rotate the view horizontally, Up/Down change the viewing

@@ -42,6 +42,29 @@ in this demo, so the celestial-coordinate path is present but not exercised. Dec
 trails and shaded bands are **unused** in this sim (the original `_decTrailList` /
 `_shadedBandList` are empty here), so they are not ported.
 
+### Object orientation (stick figure + star)
+The `setOrientationType("absolute", …)` billboard math from `7 CS Objects.as` (the
+`oType == 2` branch of `p.update`) is ported in `absOrient()` and applied to:
+- the **stick figure** — normal `(-1,0,0)`, up = zenith `(0,0,1)`: it stands on the local
+  ground and foreshortens/tilts as the view rotates (rather than a fixed upright sprite);
+- the **star** — default absolute orientation (normal = radial): the sprite lies **flat
+  against the sphere surface** and foreshortens toward the limb instead of always facing the
+  viewer. The shell rotation + y-scale (`100*npz`) and the instance counter-rotation are
+  reproduced exactly via canvas transforms.
+
+### Depth cue for the far hemisphere
+The original conveyed depth with masked per-hemisphere shading clips. Per reviewer request,
+this port instead draws a translucent **grey "frosted-glass" disc** between the far-side and
+near-side geometry, and renders far-side circle/line segments at reduced alpha, so the
+meridian / azimuth / altitude lines on the **back** of the sphere read clearly fainter than
+those in front. The physics/projection is unchanged — only the compositing differs.
+
+### Feature-label leaders
+The four named labels (Zenith, Nadir, Horizon Plane, Meridian) are drawn **offset** from
+their feature points with a short leader line pointing back to the point (echoing the
+original's offset labels), so the Zenith/Nadir marker rings stay visible instead of being
+covered by their text.
+
 ### Verified behaviours (in-browser, served over HTTP)
 - Reset → az 140.0°, alt 45.0°, theta 190°, phi 28°, all labels off.
 - az/alt sliders **and** number fields move the star and stay in sync; number format

@@ -66,6 +66,14 @@
     return s + out;
   }
 
+  // Spoken form of a degree value for screen readers: full unit word and the
+  // sign spoken as "minus" (never a bare number or a glyph), e.g.
+  // spokenDeg(45) -> "45.0 degrees", spokenDeg(-30) -> "minus 30.0 degrees".
+  function spokenDeg(x) {
+    if (x < 0) return 'minus ' + toFixedAS(-x, 1) + ' degrees';
+    return toFixedAS(x, 1) + ' degrees';
+  }
+
   /* =========================================================================
      CelestialSphere  -  the projection engine (ported from CelestialSphere.as
      and "2 CS Getter Setter", "3 CS Geometry", "5 CS Horizon Plane").
@@ -710,8 +718,9 @@
         this.azNumber.value = toFixedAS(pt.az, 1);
         this.altNumber.value = toFixedAS(pt.alt, 1);
       }
-      this.azSlider.setAttribute('aria-valuetext', toFixedAS(pt.az, 1) + ' degrees');
-      this.altSlider.setAttribute('aria-valuetext', toFixedAS(pt.alt, 1) + ' degrees');
+      // Spoken value includes the quantity name AND unit (never a bare number).
+      this.azSlider.setAttribute('aria-valuetext', 'Azimuth ' + spokenDeg(pt.az));
+      this.altSlider.setAttribute('aria-valuetext', 'Altitude ' + spokenDeg(pt.alt));
     }
 
     // ----------------------------------------------------------------------
@@ -726,6 +735,7 @@
 
       // star + markers screen positions
       const starP = {}; S.parsePointInput({ az: this.star.az, alt: this.star.alt, r: 1 }, starP);
+      this.star.p = starP;
       S.WtoSz(starP, this.star.sp);
       const zenithSp = {}; S.WtoSz({ x: 0, y: 0, z: 1 }, zenithSp);
       const nadirSp = {};  S.WtoSz({ x: 0, y: 0, z: -1 }, nadirSp);
@@ -734,35 +744,37 @@
       ctx.save();
       ctx.translate(cx, cy);
 
-      // 1. translucent sphere body (celestialBowl: light centre -> soft dark rim)
-      const bowl = ctx.createRadialGradient(0, 0, r * 0.1, 0, 0, r);
-      bowl.addColorStop(0, 'rgba(255,255,255,0.0)');
-      bowl.addColorStop(0.82, 'rgba(210,214,219,0.18)');
-      bowl.addColorStop(1, 'rgba(120,126,134,0.32)');
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, TWO_PI); ctx.fillStyle = bowl; ctx.fill();
-
       // Inner objects (markers, star) are ordered against the horizon plane by
       // their WORLD z (above/below the plane), matching the AS depth bands:
       // below-plane items draw behind the plane (occluded), above-plane in front.
       const starBelow = this.star.alt < 0;
 
-      // 2. back-facing geometry (behind the sphere centre)
+      // 1. FAR-SIDE geometry (behind the sphere centre), drawn first so the
+      //    frosted-glass overlay below can dim it.
       this.drawCircleBucket('back');
       this.drawLineBucket('back');
-      // nadir is below the plane -> behind it; star too when alt < 0
-      this.drawMarker(nadirSp);
+      this.drawMarker(nadirSp);           // nadir is below the plane
       if (starBelow) this.drawStar();
 
-      // 3. horizon plane (green ellipse, scaled + rotated like the Flash clip)
+      // 2. Frosted-glass sphere body: a translucent grey disc that sits between
+      //    the far and near halves, so anything on the far side reads as fainter
+      //    (seen "through" the front of the sphere). Also gives the sphere shape.
+      this.drawGlass();
+
+      // 3. horizon plane (green ellipse) — opaque, occludes the far/under side
       this.drawHorizonPlane();
 
-      // 4. front-facing geometry
+      // 4. NEAR-SIDE geometry (in front of the sphere centre), full strength
       this.drawCircleBucket('front');
       this.drawLineBucket('front');
       this.drawMarker(zenithSp);          // zenith is above the plane
-      // 5. stick figure (observer) stands on the plane, star on top when above
-      this.drawStick();
+      this.drawStick();                   // observer stands on the plane
       if (!starBelow) this.drawStar();
+
+      // 5. feature-label leader lines (on top), pointing from each named feature
+      //    to its offset text label so the markers stay visible.
+      this.computeLabelAnchors(zenithSp, nadirSp);
+      this.drawLabelLeaders();
 
       ctx.restore();
 
@@ -772,12 +784,13 @@
 
     drawCircleBucket(which) {
       const ctx = this.ctx;
+      const dim = (which === 'back') ? 0.55 : 1;   // far-side lines read fainter
       for (const c of this.circles) {
         const paths = c[which];
         if (!paths.length) continue;
         ctx.lineWidth = Math.max(1, c.thick);
         ctx.strokeStyle = intToCss(c.color);
-        ctx.globalAlpha = c.alpha / 100;
+        ctx.globalAlpha = (c.alpha / 100) * dim;
         for (const p of paths) {
           ctx.beginPath();
           ctx.moveTo(p.move[0], p.move[1]);
@@ -790,12 +803,13 @@
 
     drawLineBucket(which) {
       const ctx = this.ctx;
+      const dim = (which === 'back') ? 0.55 : 1;   // far-side lines read fainter
       for (const l of this.lines) {
         const segs = l[which];
         if (!segs.length) continue;
         ctx.lineWidth = Math.max(1, l.thick);
         ctx.strokeStyle = intToCss(l.color);
-        ctx.globalAlpha = l.alpha / 100;
+        ctx.globalAlpha = (l.alpha / 100) * dim;
         for (const s of segs) {
           ctx.beginPath();
           ctx.moveTo(s.move[0], s.move[1]);
@@ -845,22 +859,130 @@
       ctx.restore();
     }
 
+    // Frosted-glass sphere body. Translucent grey radial fill: clearer in the
+    // centre, denser at the rim (also draws the sphere outline). Because it is
+    // painted AFTER the far-side geometry, the back-side meridian/azimuth/altitude
+    // lines show through it muted, while the near-side lines (drawn after) stay
+    // full strength -- the depth cue the original conveyed with masked shading.
+    drawGlass() {
+      const ctx = this.ctx, r = this.S.c.r;
+      const g = ctx.createRadialGradient(0, 0, r * 0.1, 0, 0, r);
+      g.addColorStop(0,    'rgba(230,233,236,0.32)');
+      g.addColorStop(0.80, 'rgba(208,212,217,0.38)');
+      g.addColorStop(1,    'rgba(120,126,134,0.52)');
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, TWO_PI);
+      ctx.fillStyle = g; ctx.fill();
+    }
+
+    // Port of CSObjects "absolute" orientation (7 CS Objects, p.update oType 2):
+    // a flat sprite at world point p, with unit normal n and up vector u, is
+    // foreshortened (yscale = normal's screen-z) and rotated so it lies tangent
+    // to the sphere with its "up" along u. Returns the screen transform pieces.
+    absOrient(p, n, u) {
+      const S = this.S, c = S.c;
+      const sp = {}; S.WtoSz(p, sp);
+      const sp_n = {}; S.WtoSz({ x: p.x + n.x, y: p.y + n.y, z: p.z + n.z }, sp_n);
+      const sp_u = {}; S.WtoSz({ x: p.x + u.x, y: p.y + u.y, z: p.z + u.z }, sp_u);
+      const npz = (n.x * c.a6 + n.y * c.a7 + n.z * c.a8) / c.r;   // shell yscale factor
+      const A = Math.atan2(sp_n.y - sp.y, sp_n.x - sp.x) + HALF_PI; // shell rotation
+      const cA = Math.cos(A), sA = Math.sin(A);
+      const x0 = sp_u.x - sp.x, y0 = sp_u.y - sp.y;
+      const x1 = cA * x0 + sA * y0, y1 = -sA * x0 + cA * y0;
+      const instRot = Math.atan2(y1 / npz, x1) + HALF_PI;          // instance rotation
+      return { sp, yscale: npz, shellRot: A, instRot };
+    }
+
+    // Stick figure (observer) standing at the sphere centre. setOrientationType
+    // ("absolute", normal (-1,0,0), up = zenith (0,0,1)) -> tilts/foreshortens
+    // with the local ground as the view rotates.
     drawStick() {
       const ctx = this.ctx;
       if (!this.imgStick.naturalWidth) return;
       const sc = 1.2;                              // _xscale/_yscale 120
       const w = this.imgStick.naturalWidth * sc;
       const h = this.imgStick.naturalHeight * sc;
-      // Stands upright on the plane: anchor feet at the centre of the sphere.
-      ctx.drawImage(this.imgStick, -w / 2, -h, w, h);
+      const o = this.absOrient({ x: 0, y: 0, z: 0 }, { x: -1, y: 0, z: 0 }, { x: 0, y: 0, z: 1 });
+      ctx.save();
+      ctx.translate(o.sp.x, o.sp.y);
+      ctx.rotate(o.shellRot);
+      ctx.scale(1, o.yscale);
+      ctx.rotate(o.instRot);
+      ctx.drawImage(this.imgStick, -w / 2, -h, w, h);   // feet at the origin
+      ctx.restore();
     }
 
+    // Star. setOrientationType("absolute") with no args -> normal = radial (the
+    // star's own direction), so the sprite lies FLAT against the sphere surface
+    // and foreshortens toward the limb instead of always facing the viewer.
     drawStar() {
       const ctx = this.ctx;
       const img = (this.starHovered && this.star.sp.z > 0) ? this.imgStarHover : this.imgStar;
       if (!img.naturalWidth) return;
       const w = img.naturalWidth, h = img.naturalHeight;
-      ctx.drawImage(img, this.star.sp.x - w / 2, this.star.sp.y - h / 2, w, h);
+      const p = this.star.p;                       // unit point (r = 1)
+      const n = { x: p.x, y: p.y, z: p.z };        // normal = radial (already unit)
+      let u;
+      if (!(n.x === 0 && n.y === 0)) {
+        const ux = -n.x * n.z, uy = -n.z * n.y, uz = n.x * n.x + n.y * n.y;
+        const m = Math.sqrt(ux * ux + uy * uy + uz * uz);
+        u = { x: ux / m, y: uy / m, z: uz / m };
+      } else {
+        u = { x: 0, y: 1, z: 0 };
+      }
+      const o = this.absOrient(p, n, u);
+      ctx.save();
+      ctx.translate(o.sp.x, o.sp.y);
+      ctx.rotate(o.shellRot);
+      ctx.scale(1, o.yscale);
+      ctx.rotate(o.instRot);
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);     // burst centred on the point
+      ctx.restore();
+    }
+
+    // Anchor screen points for the four named feature labels (used by the leader
+    // lines and the offset text placement).
+    computeLabelAnchors(zenithSp, nadirSp) {
+      const S = this.S;
+      const project = (pt) => { const o = {}, sp = {}; S.parsePointInput(pt, o); S.WtoSz(o, sp); return sp; };
+      this._labelAnchor = {
+        zenith: zenithSp,
+        nadir: nadirSp,
+        horizon: project({ az: this.horizonAz, alt: 0, r: 1 }),
+        meridian: project({ az: 180, alt: 35, r: 1 })
+      };
+    }
+
+    // Offsets (stage px) from each feature point to its text label, with a clear
+    // leader line pointing back to the point (matching the original's offset
+    // labels): Zenith up-right, Nadir down, Meridian to the left, Horizon Plane
+    // down-left -- so the marker rings and lines stay visible.
+    static get LABEL_OFFSET() {
+      return { zenith: [34, -20], nadir: [22, 26], horizon: [-46, 26], meridian: [-74, -4] };
+    }
+
+    drawLabelLeaders() {
+      const ctx = this.ctx;
+      const off = App.LABEL_OFFSET;
+      ctx.save();
+      ctx.lineCap = 'round';
+      for (const key of Object.keys(off)) {
+        if (!this.labels[key]) continue;
+        const a = this._labelAnchor[key];
+        const [dx, dy] = off[key];
+        // Stop a little short of the text centre so the line reads as a leader.
+        const ex = a.x + dx * 0.82, ey = a.y + dy * 0.82;
+        // Light halo so the dark line stays visible over the dark-green plane too.
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
+        ctx.strokeStyle = '#1f1f1f';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
+        // Small dot at the feature end to anchor the leader clearly.
+        ctx.fillStyle = '#1f1f1f';
+        ctx.beginPath(); ctx.arc(a.x, a.y, 1.6, 0, TWO_PI); ctx.fill();
+      }
+      ctx.restore();
     }
 
     // Position the HTML text labels (in percent) over the scaled canvas.
@@ -880,11 +1002,20 @@
       place(this.el.S, project({ az: 180, alt: 0, r: 1.04 }), true);
       place(this.el.W, project({ az: 270, alt: 0, r: 1.04 }), true);
 
-      // Named labels (toggled by the checkboxes)
-      place(this.el.zenith, zenithSp, this.labels.zenith);
-      place(this.el.nadir, nadirSp, this.labels.nadir);
-      place(this.el.horizon, project({ az: this.horizonAz, alt: 0, r: 1 }), this.labels.horizon);
-      place(this.el.meridian, project({ az: 180, alt: 35, r: 1 }), this.labels.meridian);
+      // Named labels (toggled by the checkboxes): offset from the feature point
+      // with a leader line (drawn on the canvas), so the marker stays visible.
+      const off = App.LABEL_OFFSET;
+      const placeOffset = (el, key, show) => {
+        if (!show) { el.style.display = 'none'; return; }
+        const a = this._labelAnchor[key], [dx, dy] = off[key];
+        el.style.display = 'block';
+        el.style.left = ((this.CENTER + a.x + dx) / this.STAGE * 100) + '%';
+        el.style.top = ((this.CENTER + a.y + dy) / this.STAGE * 100) + '%';
+      };
+      placeOffset(this.el.zenith, 'zenith', this.labels.zenith);
+      placeOffset(this.el.nadir, 'nadir', this.labels.nadir);
+      placeOffset(this.el.horizon, 'horizon', this.labels.horizon);
+      placeOffset(this.el.meridian, 'meridian', this.labels.meridian);
 
       // az / alt degree readouts near the star (positions from setStarLocation)
       const azSp = project({ az: this.star.az - 13, alt: 5, r: 1.001 });
@@ -898,8 +1029,8 @@
       this.starHandle.style.left = ((this.CENTER + this.star.sp.x) / this.STAGE * 100) + '%';
       this.starHandle.style.top = ((this.CENTER + this.star.sp.y) / this.STAGE * 100) + '%';
       this.starHandle.setAttribute('aria-label',
-        'Star position. Azimuth ' + toFixedAS(this.star.az, 1) +
-        ' degrees, altitude ' + toFixedAS(this.star.alt, 1) + ' degrees.');
+        'Star position. Azimuth ' + spokenDeg(this.star.az) +
+        ', altitude ' + spokenDeg(this.star.alt) + '.');
     }
 
     updateCanvasDescription() {
@@ -910,14 +1041,14 @@
       if (this.labels.meridian) onLabels.push('Meridian');
       const labelText = onLabels.length ? onLabels.join(', ') : 'none';
       this.canvas.setAttribute('aria-label',
-        'Horizon diagram. Star at azimuth ' + toFixedAS(this.star.az, 1) +
-        ' degrees, altitude ' + toFixedAS(this.star.alt, 1) +
-        ' degrees. Visible labels: ' + labelText + '.');
+        'Horizon diagram. Star at azimuth ' + spokenDeg(this.star.az) +
+        ', altitude ' + spokenDeg(this.star.alt) +
+        '. Visible labels: ' + labelText + '.');
     }
 
     announce(includeOrientation) {
-      let msg = 'Star at azimuth ' + toFixedAS(this.star.az, 1) +
-                ' degrees, altitude ' + toFixedAS(this.star.alt, 1) + ' degrees.';
+      let msg = 'Star at azimuth ' + spokenDeg(this.star.az) +
+                ', altitude ' + spokenDeg(this.star.alt) + '.';
       if (includeOrientation) {
         msg += ' View reset.';
       }
@@ -997,13 +1128,18 @@
     onPointerDown(ev) {
       const stage = this.pointerToStage(ev);
       this.canvas.setPointerCapture && this.canvas.setPointerCapture(ev.pointerId);
-      // AzAlt Draggable Star.onPress: front-facing star -> drag star; else sphere
+      // AzAlt Draggable Star.onPress: front-facing star -> drag star; else sphere.
+      // Move keyboard focus to the matching control so that after a click the
+      // arrow keys act on what was clicked (the star handle is pointer-transparent,
+      // and ev.preventDefault() below would otherwise suppress default focusing).
       if (this.nearStar(stage) && this.star.sp.z > 0) {
         this.dragMode = 'star';
+        this.starHandle.focus();
       } else {
         this.dragMode = 'sphere';
         this.dragXMouse = stage.x; this.dragYMouse = stage.y;
         this.dragTheta = this.S.theta; this.dragPhi = this.S.phi;
+        this.canvas.focus();
       }
       this.canvas.classList.add('dragging');
       ev.preventDefault();
@@ -1083,7 +1219,7 @@
       const az = mod(360 - this.S.getTheta(), 360);   // viewer azimuth
       const alt = this.S.getPhi();                     // viewer altitude
       this.desc.textContent = 'View rotated. Viewing azimuth ' +
-        toFixedAS(az, 1) + ' degrees, viewing altitude ' + toFixedAS(alt, 1) + ' degrees.';
+        spokenDeg(az) + ', viewing altitude ' + spokenDeg(alt) + '.';
     }
   }
 
